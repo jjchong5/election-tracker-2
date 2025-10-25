@@ -1,0 +1,52 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Election {
+  id          String   @id @default(uuid())
+  name        String
+  state       String
+  date        DateTime
+  type        String   // "municipal", "county", "state_legislative", "special"
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  races       Race[]
+}
+
+model Race {
+  id             String      @id @default(uuid())
+  electionId     String
+  election       Election    @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  position       String
+  district       String?
+  isOpenSeat     Boolean     @default(false)
+  incumbentName  String?
+  filingDeadline DateTime?
+  salary         String?
+  termLength     String?
+  requirements   String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  candidates     Candidate[]
+}
+
+model Candidate {
+  id          String   @id @default(uuid())
+  raceId      String
+  race        Race     @relation(fields: [raceId], references: [id], onDelete: Cascade)
+  name        String
+  party       String?
+  isIncumbent Boolean  @default(false)
+  website     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

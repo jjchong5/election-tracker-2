@@ -70,7 +70,7 @@ app.get('/api/elections/:id', async (req: Request, res: Response) => {
 // Get all open seats
 app.get('/api/open-seats', async (req: Request, res: Response) => {
   try {
-    const { state } = req.query;
+    const { state, filingDeadlinePassed } = req.query;
 
     const whereClause: any = {
       isOpenSeat: true,
@@ -83,6 +83,17 @@ app.get('/api/open-seats', async (req: Request, res: Response) => {
 
     if (state) {
       whereClause.election.state = state as string;
+    }
+
+    // Add filing deadline filter
+    if (filingDeadlinePassed === 'true') {
+      whereClause.filingDeadline = {
+        lt: new Date() // Filing deadline has passed
+      };
+    } else if (filingDeadlinePassed === 'false') {
+      whereClause.filingDeadline = {
+        gte: new Date() // Filing deadline has not passed
+      };
     }
 
     const openSeats = await prisma.race.findMany({

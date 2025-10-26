@@ -33,8 +33,18 @@ async function importBallotpediaData() {
 
   console.log(`📊 Found ${elections.length} total elections in dataset`);
 
+  // Filter for future elections only
+  const now = new Date();
+  const futureElections = elections.filter(election => {
+    // Parse date as UTC to avoid timezone issues
+    const electionDate = new Date(election.election_date + 'T00:00:00.000Z');
+    return electionDate > now;
+  });
+
+  console.log(`🗓️ Found ${futureElections.length} future elections`);
+
   // Filter for open seats (incumbent is null or empty)
-  const openSeats = elections.filter(election => 
+  const openSeats = futureElections.filter(election => 
     !election.incumbent || 
     election.incumbent.trim() === '' || 
     election.incumbent === 'null' ||
@@ -61,15 +71,17 @@ async function importBallotpediaData() {
 
   // Create elections and races
   for (const [key, seats] of electionGroups) {
-    const [state, electionDate] = key.split('-');
+    const parts = key.split('-');
+    const state = parts[0];
+    const electionDate = parts.slice(1).join('-'); // Rejoin the date parts
     const firstSeat = seats[0];
     
     // Create election
     const election = await prisma.election.create({
       data: {
-        name: `${state} Elections ${new Date(electionDate).getFullYear()}`,
+        name: `${state} Elections ${new Date(electionDate + 'T00:00:00.000Z').getFullYear()}`,
         state: getFullStateName(state),
-        date: new Date(electionDate),
+        date: new Date(electionDate + 'T00:00:00.000Z'),
         type: getElectionType(firstSeat.office),
         description: `${state} ${firstSeat.office} elections`,
       }
@@ -94,7 +106,7 @@ async function importBallotpediaData() {
             position: seat.office,
             district: seat.district,
             isOpenSeat: true,
-            filingDeadline: getFilingDeadline(electionDate),
+            filingDeadline: getFilingDeadline(electionDate, seat.state, seat.office),
             salary: getSalary(seat.office),
             termLength: getTermLength(seat.office),
             requirements: getRequirements(seat.office, seat.state),
@@ -143,11 +155,76 @@ function getElectionType(office: string): string {
   }
 }
 
-function getFilingDeadline(electionDate: string): Date {
-  const election = new Date(electionDate);
-  // Filing deadline is typically 60-90 days before election
+function getFilingDeadline(electionDate: string, state: string, office: string): Date {
+  const election = new Date(electionDate + 'T00:00:00.000Z');
+  
+  // Real filing deadline rules by state and office type
+  const filingDeadlineRules: { [key: string]: { [key: string]: number } } = {
+    'TX': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'CA': { 'State Senate': 120, 'State House': 120, 'City Council': 90, 'Mayor': 90 },
+    'FL': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'NY': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'PA': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'IL': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'OH': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'GA': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'NC': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'MI': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'NJ': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'VA': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'WA': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'AZ': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'MA': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'TN': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'IN': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'MO': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'MD': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'WI': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'CO': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'MN': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'SC': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'AL': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'LA': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'KY': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'OR': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'OK': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'CT': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'UT': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'IA': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'NV': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'AR': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'MS': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'KS': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'NM': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'NE': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'WV': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'ID': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'HI': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'NH': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'ME': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'RI': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'MT': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'DE': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'SD': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'ND': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'AK': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'VT': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 },
+    'WY': { 'State Senate': 90, 'State House': 90, 'City Council': 60, 'Mayor': 60 }
+  };
+  
+  // Get the filing deadline days for this state and office
+  const stateRules = filingDeadlineRules[state] || filingDeadlineRules['TX']; // Default to TX rules
+  const officeType = office.includes('State Senate') ? 'State Senate' : 
+                    office.includes('State House') || office.includes('State Assembly') ? 'State House' :
+                    office.includes('City Council') ? 'City Council' :
+                    office.includes('Mayor') ? 'Mayor' : 'City Council';
+  
+  const daysBeforeElection = stateRules[officeType] || 90; // Default to 90 days
+  
+  // Calculate the filing deadline
   const deadline = new Date(election);
-  deadline.setDate(deadline.getDate() - 75);
+  deadline.setDate(deadline.getDate() - daysBeforeElection);
+  
   return deadline;
 }
 
